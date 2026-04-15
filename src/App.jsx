@@ -1,416 +1,653 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 
 const STYLE = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Sans:wght@400;500;600&display=swap');
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  ::-webkit-scrollbar { width: 3px; height: 3px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #2a2d3e; border-radius: 2px; }
-  input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.4); cursor:pointer; }
+  @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: linear-gradient(135deg, #dde8ff 0%, #eedeff 45%, #d9f0ff 100%);
+    min-height: 100vh;
+    font-family: 'Century Schoolbook', 'Century Old Style Std', 'Bookman Old Style', Georgia, serif;
+  }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.25); border-radius: 2px; }
+  input[type=date]::-webkit-calendar-picker-indicator { cursor:pointer; opacity:0.4; }
+  select option { background:#fff; color:#1e293b; }
+  .glass {
+    background: rgba(255,255,255,0.52);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.78);
+    box-shadow: 0 8px 32px rgba(99,102,241,0.07), inset 0 1px 0 rgba(255,255,255,0.95);
+  }
+  .glassd {
+    background: rgba(255,255,255,0.32);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.62);
+  }
+  .ginput {
+    background: rgba(255,255,255,0.65);
+    border: 1px solid rgba(99,102,241,0.18);
+    border-radius: 10px;
+    color: #1e293b;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .ginput:focus { border-color: rgba(99,102,241,.45); box-shadow: 0 0 0 3px rgba(99,102,241,.09); }
+  .rh { transition: background .14s; }
+  .rh:hover { background: rgba(255,255,255,.62) !important; }
+  .rh-proj { transition: background .14s; border-radius: 6px; cursor: pointer; }
+  .rh-proj:hover { background: rgba(255,255,255,.62) !important; }
+  @keyframes su { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fi { from{opacity:0} to{opacity:1} }
 `;
 
-const FUNCTIONS = {
-  "BE Dev":     ["Jahangir","Nabeel","Nabina Poudel","Sharad Raj"],
-  "Boss":       ["Stephen"],
-  "Design":     ["Sanjana Babu"],
-  "FE Dev":     ["Aman","Gaurav Rauthan","Jasjot Singh","Manish Moond","Prathmesh","Priyanshu","Riddhi","Rushikesh"],
-  "FS Dev":     ["Vansh"],
-  "Full Stack": ["Ankit"],
-  "Jr. Design": ["Mohammed Hisham","Sneha Gupta"],
-  "Jr. Dev":    ["Mohammed Arfaz"],
-  "Ops":        ["Brian"],
-  "PM":         ["Caleb","Midhu","Nishala","Roshna"],
-  "Pre-sales":  ["Ben"],
-  "QA":         ["Deon","Sourabh","Vebeesh"],
-  "QC":         ["Jenny","Rebecca","Soso"],
+// ── Updated Functions Structure ──
+const INITIAL_FUNCTIONS = {
+  "Tech lead": ["Stephen", "Ankit"],
+  "Design":    ["Prajjwal","Sanjana Babu","Mohammed Hisham","Sneha Gupta"],
+  "BE Dev":    ["Jahangir","Nabeel","Nabina Poudel","Sharad Raj"],
+  "FE Dev":    ["Aman","Gaurav Rauthan","Jasjot Singh","Manish Moond","Prathmesh","Priyanshu","Riddhi","Rushikesh","Mohammed Arfaz","Vansh"],
+  "PM":        ["Caleb","Midhu","Nishala","Roshna"],
+  "Pre-sales": ["Ben"],
+  "Ops":       ["Brian"],
+  "QA":        ["Deon","Sourabh","Vebeesh"],
+  "QC":        ["Jenny","Rebecca","Soso"],
 };
 
-const PROJECTS = ["MTF","TL DR","APEST","NSA","BCW","SC","SLINGSHOT","FREQUENCY","HIMALAYAN HAAT","DELIVA","GLASS"];
-
-const PC = {
-  "MTF":"#6366f1","TL DR":"#f59e0b","APEST":"#10b981","NSA":"#ef4444",
-  "BCW":"#3b82f6","SC":"#8b5cf6","SLINGSHOT":"#ec4899","FREQUENCY":"#14b8a6",
-  "HIMALAYAN HAAT":"#f97316","DELIVA":"#84cc16","GLASS":"#06b6d4",
+const DEFAULT_PROJECTS = ["MTF","TL","DR","APEST","NSA","BCW","SC","SLINGSHOT","FREQUENCY","HIMALAYAN HAAT","DELIVA","GLASS"];
+const DEFAULT_COLORS = {
+  "MTF":"#6366f1","TL":"#f59e0b","DR":"#10b981","APEST":"#ef4444",
+  "NSA":"#3b82f6","BCW":"#8b5cf6","SC":"#ec4899","SLINGSHOT":"#14b8a6",
+  "FREQUENCY":"#f97316","HIMALAYAN HAAT":"#84cc16","DELIVA":"#06b6d4","GLASS":"#a855f7",
 };
+const CPOOL = ["#e11d48","#0891b2","#15803d","#b45309","#7c3aed","#be185d","#0369a1","#047857","#92400e","#065f46"];
 
-const today = new Date();
-function dStr(d) { return d.toISOString().slice(0,10); }
-function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
-function addWeeks(d,n){ return addDays(d,n*7); }
+const APR1 = "2026-04-01";
+function dStr(d){return d instanceof Date?d.toISOString().slice(0,10):d;}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
+function addW(d,n){return addDays(d,n*7);}
+function getMon(d){const x=new Date(d);x.setHours(0,0,0,0);const dy=x.getDay();x.setDate(x.getDate()+(dy===0?-6:1-dy));return x;}
 
-const T = dStr(today);
-
-const SEED = {
-  "Jahangir":        [{project:"MTF",pct:50,start:T,end:dStr(addWeeks(today,8))},{project:"NSA",pct:25,start:T,end:dStr(addWeeks(today,4))},{project:"BCW",pct:25,start:dStr(addWeeks(today,2)),end:dStr(addWeeks(today,10))}],
-  "Nabeel":          [{project:"APEST",pct:75,start:T,end:dStr(addWeeks(today,6))},{project:"TL DR",pct:25,start:T,end:dStr(addWeeks(today,4))}],
-  "Nabina Poudel":   [{project:"SLINGSHOT",pct:100,start:T,end:dStr(addWeeks(today,12))}],
-  "Sharad Raj":      [{project:"MTF",pct:50,start:T,end:dStr(addWeeks(today,6))},{project:"GLASS",pct:50,start:dStr(addWeeks(today,2)),end:dStr(addWeeks(today,10))}],
-  "Stephen":         [{project:"MTF",pct:25,start:T,end:dStr(addWeeks(today,12))},{project:"APEST",pct:25,start:T,end:dStr(addWeeks(today,12))},{project:"NSA",pct:25,start:T,end:dStr(addWeeks(today,8))},{project:"SC",pct:25,start:T,end:dStr(addWeeks(today,8))}],
-  "Sanjana Babu":    [{project:"DELIVA",pct:60,start:T,end:dStr(addWeeks(today,8))},{project:"FREQUENCY",pct:40,start:T,end:dStr(addWeeks(today,6))}],
-  "Aman":            [{project:"MTF",pct:100,start:T,end:dStr(addWeeks(today,10))}],
-  "Gaurav Rauthan":  [{project:"TL DR",pct:50,start:T,end:dStr(addWeeks(today,4))},{project:"BCW",pct:50,start:T,end:dStr(addWeeks(today,6))}],
-  "Jasjot Singh":    [{project:"APEST",pct:50,start:T,end:dStr(addWeeks(today,8))},{project:"HIMALAYAN HAAT",pct:50,start:T,end:dStr(addWeeks(today,6))}],
-  "Manish Moond":    [{project:"SLINGSHOT",pct:75,start:T,end:dStr(addWeeks(today,6))},{project:"SC",pct:25,start:T,end:dStr(addWeeks(today,4))}],
-  "Prathmesh":       [{project:"DELIVA",pct:100,start:T,end:dStr(addWeeks(today,8))}],
-  "Priyanshu":       [{project:"NSA",pct:50,start:T,end:dStr(addWeeks(today,6))},{project:"MTF",pct:50,start:T,end:dStr(addWeeks(today,4))}],
-  "Riddhi":          [{project:"FREQUENCY",pct:100,start:T,end:dStr(addWeeks(today,8))}],
-  "Rushikesh":       [{project:"GLASS",pct:50,start:T,end:dStr(addWeeks(today,6))},{project:"BCW",pct:50,start:T,end:dStr(addWeeks(today,8))}],
-  "Vansh":           [{project:"TL DR",pct:100,start:T,end:dStr(addWeeks(today,10))}],
-  "Ankit":           [{project:"APEST",pct:50,start:T,end:dStr(addWeeks(today,6))},{project:"NSA",pct:50,start:T,end:dStr(addWeeks(today,6))}],
-  "Mohammed Hisham": [{project:"HIMALAYAN HAAT",pct:75,start:T,end:dStr(addWeeks(today,8))},{project:"DELIVA",pct:25,start:T,end:dStr(addWeeks(today,4))}],
-  "Sneha Gupta":     [{project:"SC",pct:100,start:T,end:dStr(addWeeks(today,8))}],
-  "Mohammed Arfaz":  [{project:"SLINGSHOT",pct:50,start:T,end:dStr(addWeeks(today,6))},{project:"FREQUENCY",pct:50,start:T,end:dStr(addWeeks(today,6))}],
-  "Brian":           [{project:"MTF",pct:25,start:T,end:dStr(addWeeks(today,8))},{project:"APEST",pct:25,start:T,end:dStr(addWeeks(today,8))},{project:"BCW",pct:25,start:T,end:dStr(addWeeks(today,8))},{project:"NSA",pct:25,start:T,end:dStr(addWeeks(today,8))}],
-  "Caleb":           [{project:"MTF",pct:50,start:T,end:dStr(addWeeks(today,12))},{project:"TL DR",pct:50,start:T,end:dStr(addWeeks(today,6))}],
-  "Midhu":           [{project:"APEST",pct:50,start:T,end:dStr(addWeeks(today,8))},{project:"HIMALAYAN HAAT",pct:50,start:T,end:dStr(addWeeks(today,6))}],
-  "Nishala":         [{project:"SLINGSHOT",pct:60,start:T,end:dStr(addWeeks(today,8))},{project:"SC",pct:40,start:T,end:dStr(addWeeks(today,6))}],
-  "Roshna":          [{project:"DELIVA",pct:75,start:T,end:dStr(addWeeks(today,8))},{project:"GLASS",pct:25,start:T,end:dStr(addWeeks(today,8))}],
-  "Ben":             [{project:"MTF",pct:25,start:T,end:dStr(addWeeks(today,6))},{project:"APEST",pct:25,start:T,end:dStr(addWeeks(today,6))},{project:"NSA",pct:25,start:T,end:dStr(addWeeks(today,4))}],
-  "Deon":            [{project:"MTF",pct:50,start:T,end:dStr(addWeeks(today,4))},{project:"SLINGSHOT",pct:50,start:T,end:dStr(addWeeks(today,8))}],
-  "Sourabh":         [{project:"TL DR",pct:25,start:T,end:dStr(addWeeks(today,4))},{project:"APEST",pct:25,start:T,end:dStr(addWeeks(today,4))},{project:"FREQUENCY",pct:50,start:T,end:dStr(addWeeks(today,8))}],
-  "Vebeesh":         [{project:"HIMALAYAN HAAT",pct:100,start:T,end:dStr(addWeeks(today,10))}],
-  "Jenny":           [{project:"DELIVA",pct:50,start:T,end:dStr(addWeeks(today,6))},{project:"GLASS",pct:50,start:T,end:dStr(addWeeks(today,6))}],
-  "Rebecca":         [{project:"BCW",pct:75,start:T,end:dStr(addWeeks(today,8))},{project:"SC",pct:25,start:T,end:dStr(addWeeks(today,6))}],
-  "Soso":            [{project:"MTF",pct:50,start:T,end:dStr(addWeeks(today,4))},{project:"NSA",pct:50,start:T,end:dStr(addWeeks(today,4))}],
-};
-
-function getMonday(d) {
-  const x = new Date(d); x.setHours(0,0,0,0);
-  const day = x.getDay();
-  x.setDate(x.getDate() + (day===0?-6:1-day));
-  return x;
-}
-
-function get4Weeks(anchor) {
-  const mon = getMonday(anchor);
+// Period Generators
+function get4W(anchor){
+  const m=getMon(anchor);
   return Array.from({length:4},(_,i)=>{
-    const start = addDays(mon,i*7);
-    const end   = addDays(start,6);
-    return {start,end};
+    const s=addDays(m,i*7);
+    return {start:s, end:addDays(s,6), isMonth:false};
+  });
+}
+function get4M(anchor){
+  const m=new Date(anchor);
+  m.setDate(1);
+  return Array.from({length:4},(_,i)=>{
+    const s=new Date(m.getFullYear(), m.getMonth() + i, 1);
+    const e=new Date(m.getFullYear(), m.getMonth() + i + 1, 0);
+    return {start:s, end:e, isMonth:true};
   });
 }
 
-function isActiveInWeek(entry,week) {
-  return new Date(entry.start)<=week.end && new Date(entry.end)>=week.start;
+function active(e, period){return new Date(e.start) <= period.end && new Date(e.end) >= period.start;}
+function allocW(entries, period){return (entries||[]).filter(e=>active(e,period)).reduce((s,e)=>s+Number(e.pct),0);}
+function pLabel(p){
+  return p.isMonth 
+    ? p.start.toLocaleDateString("en-GB",{month:"short", year:"numeric"}) 
+    : p.start.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
 }
 
-function allocForWeek(entries,week) {
-  return (entries||[]).filter(e=>isActiveInWeek(e,week)).reduce((s,e)=>s+Number(e.pct),0);
+function buildSeed(){
+  const e=n=>dStr(addW(new Date(APR1),n));
+  return {
+    "Jahangir":        [{project:"MTF",pct:50,start:APR1,end:e(8)},{project:"NSA",pct:25,start:APR1,end:e(4)},{project:"BCW",pct:25,start:APR1,end:e(10)}],
+    "Nabeel":          [{project:"APEST",pct:75,start:APR1,end:e(6)},{project:"TL",pct:25,start:APR1,end:e(4)}],
+    "Nabina Poudel":   [{project:"SLINGSHOT",pct:100,start:APR1,end:e(12)}],
+    "Sharad Raj":      [{project:"MTF",pct:50,start:APR1,end:e(6)},{project:"GLASS",pct:50,start:APR1,end:e(10)}],
+    "Stephen":         [{project:"MTF",pct:25,start:APR1,end:e(12)},{project:"APEST",pct:25,start:APR1,end:e(12)},{project:"NSA",pct:25,start:APR1,end:e(8)},{project:"SC",pct:25,start:APR1,end:e(8)}],
+    "Prajjwal":        [{project:"MTF",pct:50,start:APR1,end:e(6)},{project:"DR",pct:50,start:APR1,end:e(8)}],
+    "Sanjana Babu":    [{project:"DELIVA",pct:60,start:APR1,end:e(8)},{project:"FREQUENCY",pct:40,start:APR1,end:e(6)}],
+    "Mohammed Hisham": [{project:"HIMALAYAN HAAT",pct:75,start:APR1,end:e(8)},{project:"DELIVA",pct:25,start:APR1,end:e(4)}],
+    "Sneha Gupta":     [{project:"SC",pct:100,start:APR1,end:e(8)}],
+    "Aman":            [{project:"MTF",pct:100,start:APR1,end:e(10)}],
+    "Gaurav Rauthan":  [{project:"TL",pct:50,start:APR1,end:e(4)},{project:"BCW",pct:50,start:APR1,end:e(6)}],
+    "Jasjot Singh":    [{project:"APEST",pct:50,start:APR1,end:e(8)},{project:"HIMALAYAN HAAT",pct:50,start:APR1,end:e(6)}],
+    "Manish Moond":    [{project:"SLINGSHOT",pct:75,start:APR1,end:e(6)},{project:"SC",pct:25,start:APR1,end:e(4)}],
+    "Prathmesh":       [{project:"DELIVA",pct:100,start:APR1,end:e(8)}],
+    "Priyanshu":       [{project:"NSA",pct:50,start:APR1,end:e(6)},{project:"MTF",pct:50,start:APR1,end:e(4)}],
+    "Riddhi":          [{project:"FREQUENCY",pct:100,start:APR1,end:e(8)}],
+    "Rushikesh":       [{project:"GLASS",pct:50,start:APR1,end:e(6)},{project:"BCW",pct:50,start:APR1,end:e(8)}],
+    "Mohammed Arfaz":  [{project:"SLINGSHOT",pct:50,start:APR1,end:e(6)},{project:"FREQUENCY",pct:50,start:APR1,end:e(6)}],
+    "Vansh":           [{project:"TL",pct:100,start:APR1,end:e(10)}],
+    "Ankit":           [{project:"APEST",pct:50,start:APR1,end:e(6)},{project:"NSA",pct:50,start:APR1,end:e(6)}],
+    "Brian":           [{project:"MTF",pct:25,start:APR1,end:e(8)},{project:"APEST",pct:25,start:APR1,end:e(8)},{project:"BCW",pct:25,start:APR1,end:e(8)},{project:"NSA",pct:25,start:APR1,end:e(8)}],
+    "Caleb":           [{project:"MTF",pct:50,start:APR1,end:e(12)},{project:"TL",pct:50,start:APR1,end:e(6)}],
+    "Midhu":           [{project:"APEST",pct:50,start:APR1,end:e(8)},{project:"HIMALAYAN HAAT",pct:50,start:APR1,end:e(6)}],
+    "Nishala":         [{project:"SLINGSHOT",pct:60,start:APR1,end:e(8)},{project:"SC",pct:40,start:APR1,end:e(6)}],
+    "Roshna":          [{project:"DELIVA",pct:75,start:APR1,end:e(8)},{project:"GLASS",pct:25,start:APR1,end:e(8)}],
+    "Ben":             [{project:"MTF",pct:25,start:APR1,end:e(6)},{project:"APEST",pct:25,start:APR1,end:e(6)},{project:"NSA",pct:25,start:APR1,end:e(4)}],
+    "Deon":            [{project:"MTF",pct:50,start:APR1,end:e(4)},{project:"SLINGSHOT",pct:50,start:APR1,end:e(8)}],
+    "Sourabh":         [{project:"TL",pct:25,start:APR1,end:e(4)},{project:"APEST",pct:25,start:APR1,end:e(4)},{project:"FREQUENCY",pct:50,start:APR1,end:e(8)}],
+    "Vebeesh":         [{project:"HIMALAYAN HAAT",pct:100,start:APR1,end:e(10)}],
+    "Jenny":           [{project:"DELIVA",pct:50,start:APR1,end:e(6)},{project:"GLASS",pct:50,start:APR1,end:e(6)}],
+    "Rebecca":         [{project:"BCW",pct:75,start:APR1,end:e(8)},{project:"SC",pct:25,start:APR1,end:e(6)}],
+    "Soso":            [{project:"MTF",pct:50,start:APR1,end:e(4)},{project:"NSA",pct:50,start:APR1,end:e(4)}],
+  };
 }
 
-function weekLabel(w) {
-  return w.start.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
-}
+// ── Water cell ──
+function WaterCell({entries, period, getColor}){
+  const act=entries.filter(e=>active(e, period));
+  const tot=act.reduce((s,e)=>s+Number(e.pct),0);
+  const over=tot > 100; 
+  const cl=Math.min(tot,100);
 
-function StatusPill({total}) {
-  const cfg = total>100 ? {bg:"rgba(239,68,68,0.15)",color:"#f87171",b:"rgba(239,68,68,0.3)",t:"OVER"}
-    : total>=80 ? {bg:"rgba(74,222,128,0.1)",color:"#4ade80",b:"rgba(74,222,128,0.2)",t:"OK"}
-    : total>0   ? {bg:"rgba(245,158,11,0.1)",color:"#fbbf24",b:"rgba(245,158,11,0.2)",t:"LOW"}
-    :             {bg:"rgba(100,116,139,0.1)",color:"#334155",b:"rgba(100,116,139,0.15)",t:"—"};
-  return (
-    <span style={{fontSize:10,fontFamily:"JetBrains Mono,monospace",fontWeight:600,padding:"2px 7px",borderRadius:4,background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.b}`}}>
-      {cfg.t}
-    </span>
-  );
-}
+  let wc = "transparent";
+  if (tot >= 100) wc = "rgba(239, 68, 68, 0.8)"; // Red
+  else if (tot >= 75) wc = "rgba(234, 88, 12, 0.8)"; // Darker Orange
+  else if (tot >= 50) wc = "rgba(245, 158, 11, 0.7)"; // Orange
+  else if (tot > 0) wc = "rgba(34, 197, 94, 0.7)"; // Green
 
-function WeekCell({entries,week}) {
-  const active = (entries||[]).filter(e=>isActiveInWeek(e,week));
-  const total  = active.reduce((s,e)=>s+Number(e.pct),0);
-  const over   = total>100;
-  return (
-    <div style={{
-      width:88,minHeight:50,borderRadius:6,overflow:"hidden",
-      background:"#0d1117",border:`1px solid ${over?"rgba(239,68,68,0.35)":"#1a1f2e"}`,
-      display:"flex",flexDirection:"column",
-    }}>
-      <div style={{display:"flex",height:3}}>
-        {active.length===0
-          ? <div style={{flex:1,background:"#1a1f2e"}}/>
-          : active.map((e,i)=><div key={i} style={{flex:e.pct,background:PC[e.project]||"#64748b"}}/>)
-        }
+  return(
+    <div style={{width:80,height:54,borderRadius:10,overflow:"hidden",position:"relative",background:"rgba(255,255,255,.45)",border:`1px solid ${over?"rgba(239,68,68,.35)":"rgba(255,255,255,.75)"}`,boxShadow:"0 2px 8px rgba(99,102,241,.05)"}}>
+      <div style={{position:"absolute",bottom:0,left:0,right:0,height:`${cl}%`,background:wc,transition:"height .5s cubic-bezier(.34,1.56,.64,1)",borderRadius:"0 0 9px 9px"}}>
+        {tot>0&&<div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"rgba(255,255,255,.35)",borderRadius:1}}/>}
       </div>
-      <div style={{padding:"5px 7px",flex:1,display:"flex",flexDirection:"column",justifyContent:"center"}}>
-        {total===0
-          ? <div style={{fontSize:11,color:"#1e2535",textAlign:"center",fontFamily:"JetBrains Mono,monospace"}}>—</div>
-          : <>
-              <div style={{fontSize:13,fontWeight:700,fontFamily:"JetBrains Mono,monospace",color:over?"#f87171":total>=80?"#e2e8f0":"#94a3b8"}}>{total}%</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:2,marginTop:2}}>
-                {active.map((e,i)=>(
-                  <span key={i} style={{fontSize:8,fontWeight:600,color:PC[e.project]||"#64748b",fontFamily:"JetBrains Mono,monospace"}}>
-                    {e.project.length>6?e.project.slice(0,6)+"…":e.project}
-                  </span>
-                ))}
-              </div>
-            </>
-        }
+      <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2}}>
+        <div style={{fontSize:12,fontWeight:700,color:tot>40?"#fff":"#1e293b",textShadow:tot>40?"0 1px 3px rgba(0,0,0,.15)":"none"}}>
+          {tot===0?"—":`${tot}%`}
+        </div>
+        {act.length>0&&(
+          <div style={{display:"flex",gap:3}}>
+            {act.slice(0,4).map((e,i)=><div key={i} style={{width:4,height:4,borderRadius:"50%",background:getColor(e.project),opacity:tot>40?.85:.65}}/>)}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function EditModal({person,fn,entries,onSave,onClose}) {
-  const [local,setLocal] = useState(entries.map(e=>({...e})));
-
-  function add()    { setLocal(p=>[...p,{project:PROJECTS[0],pct:50,start:T,end:dStr(addWeeks(today,4))}]); }
-  function remove(i){ setLocal(p=>p.filter((_,j)=>j!==i)); }
-  function upd(i,f,v){ setLocal(p=>p.map((e,j)=>j===i?{...e,[f]:f==="pct"?Math.min(100,Math.max(0,Number(v)||0)):v}:e)); }
-
-  const weeks = get4Weeks(today);
-  const weekTotals = weeks.map(w=>allocForWeek(local,w));
-  const maxTotal   = Math.max(...weekTotals,0);
-  const hasError   = maxTotal>100;
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={onClose}>
-      <div style={{background:"#0d1117",border:"1px solid #1e2535",borderRadius:16,padding:26,width:500,maxHeight:"85vh",overflowY:"auto",fontFamily:"Instrument Sans,sans-serif"}} onClick={e=>e.stopPropagation()}>
-
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
-          <div>
-            <div style={{fontSize:16,fontWeight:800,color:"#f1f5f9",fontFamily:"Syne,sans-serif"}}>{person}</div>
-            <div style={{fontSize:11,color:"#334155",marginTop:2}}>{fn}</div>
+// ── Dial ──
+function Dial({offset, setOffset, label}){
+  const ref=useRef(null); const sx=useRef(null); const so=useRef(null);
+  function pd(e){sx.current=e.clientX;so.current=offset;ref.current?.setPointerCapture(e.pointerId);}
+  function pm(e){if(sx.current===null)return;const dx=e.clientX-sx.current;const d=Math.round(-dx/44);const n=so.current+d;if(n!==offset)setOffset(n);}
+  function pu(){sx.current=null;}
+  
+  return(
+    <div style={{display:"flex", flexDirection:"column", alignItems:"center", padding:"14px 20px 8px"}}>
+      <div style={{display:"flex", alignItems:"center", gap:16}}>
+        <button onClick={()=>setOffset(w=>w-4)} style={{width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.55)",border:"1px solid rgba(255,255,255,.8)",cursor:"pointer",color:"#6366f1",fontSize:18,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px rgba(99,102,241,.1)"}}>‹</button>
+        
+        <div ref={ref} onPointerDown={pd} onPointerMove={pm} onPointerUp={pu}
+          style={{width:260,height:44,borderRadius:22,overflow:"hidden",position:"relative",background:"rgba(255,255,255,.35)",border:"1px solid rgba(255,255,255,.8)",boxShadow:"inset 0 2px 8px rgba(99,102,241,.07)",cursor:"grab",userSelect:"none",touchAction:"none"}}>
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",gap:20}}>
+            {[-2,-1,0,1,2].map(i=><div key={i} style={{width:1.5,height:i===0?24:i===Math.abs(i)?14:10,borderRadius:1,background:i===0?"rgba(99,102,241,.7)":"rgba(99,102,241,.18)"}}/>)}
           </div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#334155",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
+          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#4338ca"}}>{label}</div>
+          </div>
         </div>
 
-        {/* 4-week preview */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,background:"#070b12",borderRadius:10,padding:12,marginBottom:18}}>
-          {weeks.map((w,i)=>(
+        <button onClick={()=>setOffset(w=>w+4)} style={{width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,.55)",border:"1px solid rgba(255,255,255,.8)",cursor:"pointer",color:"#6366f1",fontSize:18,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 6px rgba(99,102,241,.1)"}}>›</button>
+      </div>
+      
+      <div style={{height: 18, marginTop: 4}}>
+        {offset !== 0 && (
+          <button onClick={() => setOffset(0)} style={{background:"transparent", border:"none", fontSize:10, color:"#6366f1", cursor:"pointer", fontWeight:600, textDecoration:"underline"}}>
+            ← Back to today
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Edit modal ──
+function EditModal({person,fn,entries,onSave,onClose,projects,getColor}){
+  const [local,setLocal]=useState(entries.map(e=>({...e})));
+  const add=()=>setLocal(p=>[...p,{project:projects[0],pct:50,start:APR1,end:dStr(addW(new Date(APR1),8))}]);
+  const rm=i=>setLocal(p=>p.filter((_,j)=>j!==i));
+  const upd=(i,f,v)=>setLocal(p=>p.map((e,j)=>j===i?{...e,[f]:f==="pct"?Math.min(100,Math.max(0,Number(v)||0)):v}:e));
+  const periods=get4W(new Date()); const wt=periods.map(w=>allocW(local,w)); const mx=Math.max(...wt,0); const err=mx>100;
+  
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(99,102,241,.07)",backdropFilter:"blur(14px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fi .2s ease"}} onClick={onClose}>
+      <div className="glass" style={{borderRadius:20,padding:26,width:490,maxHeight:"88vh",overflowY:"auto",animation:"su .22s ease"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+          <div>
+            <div style={{fontSize:17,fontWeight:700,color:"#1e293b"}}>{person}</div>
+            <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{fn}</div>
+          </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,.6)",border:"1px solid rgba(255,255,255,.8)",borderRadius:"50%",width:28,height:28,cursor:"pointer",color:"#64748b",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,background:"rgba(99,102,241,.04)",borderRadius:12,padding:10,marginBottom:18,border:"1px solid rgba(99,102,241,.07)"}}>
+          {periods.map((w,i)=>(
             <div key={i} style={{textAlign:"center"}}>
-              <div style={{fontSize:9,color:"#334155",marginBottom:3,fontFamily:"JetBrains Mono,monospace"}}>{weekLabel(w)}</div>
-              <div style={{fontSize:16,fontWeight:700,fontFamily:"JetBrains Mono,monospace",color:weekTotals[i]>100?"#f87171":weekTotals[i]>=80?"#4ade80":weekTotals[i]>0?"#fbbf24":"#2a3040"}}>
-                {weekTotals[i]||"—"}{weekTotals[i]>0?"%":""}
+              <div style={{fontSize:9,color:"#94a3b8",marginBottom:4,textTransform:"uppercase",letterSpacing:".05em"}}>{pLabel(w)}</div>
+              <div style={{height:32,borderRadius:7,overflow:"hidden",position:"relative",background:"rgba(255,255,255,.5)",border:"1px solid rgba(255,255,255,.8)"}}>
+                <div style={{position:"absolute",bottom:0,left:0,right:0,height:`${Math.min(wt[i],100)}%`,background:wt[i]>100?"rgba(239,68,68,.5)":wt[i]>=80?"rgba(99,102,241,.5)":"rgba(99,102,241,.22)",transition:"height .3s"}}/>
+                <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:wt[i]>58?"#fff":"#1e293b"}}>{wt[i]||"—"}{wt[i]>0?"%":""}</div>
               </div>
             </div>
           ))}
         </div>
-
-        {/* Assignment rows */}
-        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+        <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:12}}>
           {local.map((entry,i)=>(
-            <div key={i} style={{background:"#070b12",borderRadius:10,padding:12,border:"1px solid #1a1f2e"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                <div style={{width:8,height:8,borderRadius:"50%",background:PC[entry.project]||"#64748b",flexShrink:0}}/>
-                <select value={entry.project} onChange={e=>upd(i,"project",e.target.value)} style={{flex:1,background:"#0d1117",border:"1px solid #1e2535",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontSize:13,outline:"none"}}>
-                  {PROJECTS.map(p=><option key={p} value={p}>{p}</option>)}
+            <div key={i} className="glassd" style={{borderRadius:12,padding:13}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:9}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:getColor(entry.project),flexShrink:0}}/>
+                <select value={entry.project} onChange={e=>upd(i,"project",e.target.value)} className="ginput" style={{flex:1,padding:"6px 9px",fontSize:13}}>
+                  {projects.map(p=><option key={p} value={p}>{p}</option>)}
                 </select>
-                <input type="number" min="0" max="100" step="5" value={entry.pct} onChange={e=>upd(i,"pct",e.target.value)}
-                  style={{width:60,background:"#0d1117",border:"1px solid #1e2535",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontSize:13,textAlign:"right",outline:"none",fontFamily:"JetBrains Mono,monospace"}}/>
-                <span style={{fontSize:11,color:"#334155"}}>%</span>
-                <button onClick={()=>remove(i)} style={{background:"none",border:"none",color:"#334155",cursor:"pointer",fontSize:16}}>×</button>
+                <input type="number" min="0" max="100" step="5" value={entry.pct} onChange={e=>upd(i,"pct",e.target.value)} className="ginput" style={{width:60,padding:"6px 8px",fontSize:13,textAlign:"right"}}/>
+                <span style={{fontSize:11,color:"#94a3b8"}}>%</span>
+                <button onClick={()=>rm(i)} style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.15)",borderRadius:7,color:"#ef4444",cursor:"pointer",width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>×</button>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
                 {["start","end"].map(f=>(
                   <div key={f}>
-                    <div style={{fontSize:9,color:"#334155",marginBottom:3,fontFamily:"JetBrains Mono,monospace",textTransform:"uppercase",letterSpacing:"0.06em"}}>{f} date</div>
-                    <input type="date" value={entry[f]} onChange={e=>upd(i,f,e.target.value)}
-                      style={{width:"100%",background:"#0d1117",border:"1px solid #1e2535",borderRadius:6,padding:"5px 8px",color:"#94a3b8",fontSize:12,outline:"none"}}/>
+                    <div style={{fontSize:9,color:"#94a3b8",marginBottom:3,textTransform:"uppercase",letterSpacing:".06em"}}>{f} date</div>
+                    <input type="date" value={entry[f]} onChange={e=>upd(i,f,e.target.value)} className="ginput" style={{width:"100%",padding:"6px 8px",fontSize:12}}/>
                   </div>
                 ))}
               </div>
             </div>
           ))}
         </div>
-
-        <button onClick={add} style={{width:"100%",background:"transparent",border:"1px dashed #1e2535",borderRadius:10,padding:"8px",color:"#334155",cursor:"pointer",fontSize:13,marginBottom:14,fontFamily:"Instrument Sans,sans-serif"}}>
-          + Add project assignment
-        </button>
-
-        {hasError && (
-          <div style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#fca5a5",marginBottom:12}}>
-            ⚠ One or more weeks exceed 100%. Adjust dates or percentages.
-          </div>
-        )}
-
-        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-          <button onClick={onClose} style={{background:"none",border:"1px solid #1e2535",borderRadius:8,padding:"8px 16px",color:"#475569",cursor:"pointer",fontSize:13}}>Cancel</button>
-          <button onClick={()=>{if(!hasError)onSave(local);}} disabled={hasError} style={{background:hasError?"#0d1117":"#6366f1",border:"none",borderRadius:8,padding:"8px 20px",color:hasError?"#334155":"#fff",cursor:hasError?"not-allowed":"pointer",fontSize:13,fontWeight:600,fontFamily:"Syne,sans-serif"}}>
-            Save
-          </button>
+        <button onClick={add} className="glassd" style={{width:"100%",border:"1.5px dashed rgba(99,102,241,.28)",borderRadius:11,padding:"8px",color:"#6366f1",cursor:"pointer",fontSize:13,marginBottom:12,fontFamily:"inherit"}}>+ Add assignment</button>
+        {err&&<div style={{background:"rgba(239,68,68,.06)",border:"1px solid rgba(239,68,68,.18)",borderRadius:9,padding:"9px 13px",fontSize:12,color:"#dc2626",marginBottom:11}}>⚠ Exceeds 100%. Please adjust.</div>}
+        <div style={{display:"flex",gap:9,justifyContent:"flex-end"}}>
+          <button onClick={onClose} className="glassd" style={{borderRadius:9,padding:"8px 16px",color:"#64748b",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>Cancel</button>
+          <button onClick={()=>{if(!err)onSave(local);}} disabled={err} style={{background:err?"rgba(99,102,241,.1)":"rgba(99,102,241,.85)",backdropFilter:"blur(8px)",border:"1px solid rgba(99,102,241,.3)",borderRadius:9,padding:"8px 20px",color:err?"#a5b4fc":"#fff",cursor:err?"not-allowed":"pointer",fontSize:13,fontWeight:600}}>Save</button>
         </div>
       </div>
     </div>
   );
 }
 
-export default function Dashboard() {
-  const [allocations,setAllocations] = useState(SEED);
-  const [editing,setEditing]         = useState(null);
-  const [weekOffset,setWeekOffset]   = useState(0);
-  const [search,setSearch]           = useState("");
-  const [filterFn,setFilterFn]       = useState(null);
+// ── Add project modal ──
+function AddProjectModal({onAdd,onClose,existing}){
+  const [name,setName]=useState(""); const [color,setColor]=useState(CPOOL[0]);
+  const t=name.trim().toUpperCase(); const ex=existing.includes(t);
+  const allColors=[...Object.values(DEFAULT_COLORS).slice(0,8),...CPOOL.slice(0,6)];
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(99,102,241,.07)",backdropFilter:"blur(14px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fi .2s ease"}} onClick={onClose}>
+      <div className="glass" style={{borderRadius:20,padding:26,width:340,animation:"su .22s ease"}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:16,fontWeight:700,color:"#1e293b",marginBottom:4}}>New Project</div>
+        <div style={{fontSize:12,color:"#94a3b8",marginBottom:18}}>Short code, e.g. ORBIT, NOVA, PULSE</div>
+        <input value={name} onChange={e=>setName(e.target.value.toUpperCase())} placeholder="PROJECT CODE" className="ginput" style={{width:"100%",padding:"10px 13px",fontSize:14,marginBottom:7,letterSpacing:".06em"}}/>
+        {ex&&<div style={{fontSize:11,color:"#ef4444",marginBottom:8}}>Already exists.</div>}
+        <div style={{fontSize:9,color:"#94a3b8",marginBottom:7,textTransform:"uppercase",letterSpacing:".05em"}}>Colour</div>
+        <div style={{display:"flex",gap:7,marginBottom:20,flexWrap:"wrap"}}>
+          {allColors.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:22,height:22,borderRadius:"50%",background:c,cursor:"pointer",border:`2px solid ${color===c?"#1e293b":"transparent"}`,boxShadow:color===c?"0 0 0 2px rgba(255,255,255,.8)":"none",transform:color===c?"scale(1.18)":"scale(1)",transition:"transform .12s"}}/>)}
+        </div>
+        <div style={{display:"flex",gap:9,justifyContent:"flex-end"}}>
+          <button onClick={onClose} className="glassd" style={{borderRadius:9,padding:"8px 15px",color:"#64748b",cursor:"pointer",fontSize:13}}>Cancel</button>
+          <button onClick={()=>{if(t&&!ex){onAdd(t,color);onClose();}}} disabled={!t||ex} style={{background:!t||ex?"rgba(99,102,241,.1)":"rgba(99,102,241,.85)",border:"1px solid rgba(99,102,241,.3)",borderRadius:9,padding:"8px 18px",color:!t||ex?"#a5b4fc":"#fff",cursor:!t||ex?"not-allowed":"pointer",fontSize:13,fontWeight:600}}>Add</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const anchorDate = useMemo(()=>addDays(today,weekOffset*7),[weekOffset]);
-  const weeks      = useMemo(()=>get4Weeks(anchorDate),[anchorDate]);
-  const allPeople  = useMemo(()=>Object.entries(FUNCTIONS).flatMap(([fn,pp])=>pp.map(name=>({name,fn}))),[]);
+// ── Add Member Modal ──
+function AddMemberModal({onAdd, onClose, teams}){
+  const [name, setName] = useState("");
+  const [team, setTeam] = useState(teams[0]);
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(99,102,241,.07)",backdropFilter:"blur(14px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fi .2s ease"}} onClick={onClose}>
+      <div className="glass" style={{borderRadius:20,padding:26,width:340,animation:"su .22s ease"}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:16,fontWeight:700,color:"#1e293b",marginBottom:18}}>Add New Member</div>
+        <div style={{fontSize:9,color:"#94a3b8",marginBottom:7,textTransform:"uppercase"}}>Full Name</div>
+        <input value={name} onChange={e=>setName(e.target.value)} placeholder="Jane Doe" className="ginput" style={{width:"100%",padding:"10px 13px",fontSize:14,marginBottom:15}}/>
+        <div style={{fontSize:9,color:"#94a3b8",marginBottom:7,textTransform:"uppercase"}}>Assign to Team</div>
+        <select value={team} onChange={e=>setTeam(e.target.value)} className="ginput" style={{width:"100%",padding:"10px 13px",fontSize:14,marginBottom:20}}>
+          {teams.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <div style={{display:"flex",gap:9,justifyContent:"flex-end"}}>
+          <button onClick={onClose} className="glassd" style={{borderRadius:9,padding:"8px 15px",color:"#64748b",cursor:"pointer",fontSize:13}}>Cancel</button>
+          <button onClick={()=>{if(name.trim()){onAdd(name.trim(), team); onClose();}}} disabled={!name.trim()} style={{background:"rgba(99,102,241,.85)",border:"1px solid rgba(99,102,241,.3)",borderRadius:9,padding:"8px 18px",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:600}}>Add Member</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const kpis = useMemo(()=>{
-    let over=0,under=0,unassigned=0,ok=0;
-    allPeople.forEach(p=>{
-      const entries=allocations[p.name]||[];
-      const loads=weeks.map(w=>allocForWeek(entries,w));
-      const mx=Math.max(...loads,0), mn=Math.min(...loads);
-      if(mx>100) over++;
-      else if(mx===0) unassigned++;
-      else if(mn<50) under++;
-      else ok++;
-    });
-    return {over,under,unassigned,ok};
-  },[allocations,weeks]);
+// ── Add Resource to Project Modal ──
+function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocations}){
+  // Filter out people who are already assigned to this project
+  const avail = allPeople.filter(p => !(allocations[p.name]||[]).some(e => e.project === project));
+  
+  const [person, setPerson] = useState(avail.length ? avail[0].name : "");
+  const [pct, setPct] = useState(50);
+  const [start, setStart] = useState(APR1);
+  const [end, setEnd] = useState(dStr(addW(new Date(APR1), 8)));
 
-  const filtered = useMemo(()=>{
-    const q=search.toLowerCase();
-    return Object.entries(FUNCTIONS).map(([fn,people])=>({
-      fn,
-      people:people.filter(name=>{
-        const ms=!q||name.toLowerCase().includes(q)||fn.toLowerCase().includes(q);
-        const mf=!filterFn||fn===filterFn;
-        return ms&&mf;
-      })
-    })).filter(({people})=>people.length>0);
-  },[search,filterFn]);
-
-  const monthLabel = useMemo(()=>{
-    const ms=[...new Set(weeks.map(w=>w.start.toLocaleDateString("en-GB",{month:"long",year:"numeric"})))];
-    return ms.join(" / ");
-  },[weeks]);
-
-  function save(name,newEntries){
-    setAllocations(p=>({...p,[name]:newEntries}));
-    setEditing(null);
+  if(avail.length === 0){
+    return (
+      <div style={{position:"fixed",inset:0,background:"rgba(99,102,241,.07)",backdropFilter:"blur(14px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={onClose}>
+        <div className="glass" style={{borderRadius:20,padding:26,width:340}} onClick={e=>e.stopPropagation()}>
+          <div style={{fontSize:16,fontWeight:700,color:"#1e293b",marginBottom:10}}>All Assigned</div>
+          <div style={{fontSize:13,color:"#64748b",marginBottom:20}}>Every team member is already assigned to {project}. To edit their allocation, click their name in the project list.</div>
+          <button onClick={onClose} className="glassd" style={{width:"100%",borderRadius:9,padding:"8px",color:"#1e293b",cursor:"pointer",fontSize:13,fontWeight:600}}>Close</button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div style={{minHeight:"100vh",background:"#07080f",fontFamily:"Instrument Sans,sans-serif",color:"#e2e8f0"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(99,102,241,.07)",backdropFilter:"blur(14px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,animation:"fi .2s ease"}} onClick={onClose}>
+      <div className="glass" style={{borderRadius:20,padding:26,width:340,animation:"su .22s ease"}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:16,fontWeight:700,color:"#1e293b",marginBottom:4}}>Add Resource</div>
+        <div style={{fontSize:12,color:"#6366f1",marginBottom:18,fontWeight:600}}>Project: {project}</div>
+        
+        <div style={{fontSize:9,color:"#94a3b8",marginBottom:7,textTransform:"uppercase"}}>Select Member</div>
+        <select value={person} onChange={e=>setPerson(e.target.value)} className="ginput" style={{width:"100%",padding:"10px 13px",fontSize:13,marginBottom:15}}>
+          {avail.map(p => <option key={p.name} value={p.name}>{p.name} ({p.fn})</option>)}
+        </select>
+
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:15}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:9,color:"#94a3b8",marginBottom:7,textTransform:"uppercase"}}>Allocation %</div>
+            <input type="number" min="0" max="100" step="5" value={pct} onChange={e=>setPct(e.target.value)} className="ginput" style={{width:"100%",padding:"10px 13px",fontSize:13}}/>
+          </div>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
+          <div>
+            <div style={{fontSize:9,color:"#94a3b8",marginBottom:7,textTransform:"uppercase"}}>Start</div>
+            <input type="date" value={start} onChange={e=>setStart(e.target.value)} className="ginput" style={{width:"100%",padding:"10px 8px",fontSize:12}}/>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:"#94a3b8",marginBottom:7,textTransform:"uppercase"}}>End</div>
+            <input type="date" value={end} onChange={e=>setEnd(e.target.value)} className="ginput" style={{width:"100%",padding:"10px 8px",fontSize:12}}/>
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:9,justifyContent:"flex-end"}}>
+          <button onClick={onClose} className="glassd" style={{borderRadius:9,padding:"8px 15px",color:"#64748b",cursor:"pointer",fontSize:13}}>Cancel</button>
+          <button onClick={()=>{onSave(person, {project, pct:Number(pct)||0, start, end}); onClose();}} style={{background:"rgba(99,102,241,.85)",border:"1px solid rgba(99,102,241,.3)",borderRadius:9,padding:"8px 18px",color:"#fff",cursor:"pointer",fontSize:13,fontWeight:600}}>Add to Project</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN ──
+export default function Dashboard(){
+  // Bumped IDs to 5 so local storage reloads the new teams fresh.
+  const LS_ALLOC="rp_alloc5"; const LS_PROJ="rp_proj5"; const LS_COL="rp_col5"; const LS_FN="rp_fn5";
+
+  const [projects,setProjects]=useState(()=>{try{const s=localStorage.getItem(LS_PROJ);return s?JSON.parse(s):DEFAULT_PROJECTS;}catch{return DEFAULT_PROJECTS;}});
+  const [allocations,setAllocations]=useState(()=>{try{const s=localStorage.getItem(LS_ALLOC);return s?JSON.parse(s):buildSeed();}catch{return buildSeed();}});
+  const [pColors,setPColors]=useState(()=>{try{const s=localStorage.getItem(LS_COL);return s?JSON.parse(s):DEFAULT_COLORS;}catch{return DEFAULT_COLORS;}});
+  const [functions, setFunctions] = useState(()=>{try{const s=localStorage.getItem(LS_FN);return s?JSON.parse(s):INITIAL_FUNCTIONS;}catch{return INITIAL_FUNCTIONS;}});
+
+  useEffect(()=>{try{localStorage.setItem(LS_PROJ,JSON.stringify(projects));}catch{}},[projects]);
+  useEffect(()=>{try{localStorage.setItem(LS_ALLOC,JSON.stringify(allocations));}catch{}},[allocations]);
+  useEffect(()=>{try{localStorage.setItem(LS_COL,JSON.stringify(pColors));}catch{}},[pColors]);
+  useEffect(()=>{try{localStorage.setItem(LS_FN,JSON.stringify(functions));}catch{}},[functions]);
+
+  const [timeView, setTimeView] = useState("weekly"); 
+  const [offset, setOffset] = useState(0); 
+  const [search,setSearch]=useState("");
+  const [filterFn,setFilterFn]=useState(null);
+  const [filterProj,setFilterProj]=useState(null);
+  const [view,setView]=useState("team");
+  
+  const [editing,setEditing]=useState(null);
+  const [addingProj,setAddingProj]=useState(false);
+  const [addingMember, setAddingMember] = useState(false);
+  const [addingResourceToProj, setAddingResourceToProj] = useState(null); // stores project name
+
+  const anchor=useMemo(()=>{
+    if(timeView === "weekly") return addDays(new Date(), offset*7);
+    const d = new Date(); d.setMonth(d.getMonth() + offset); return d;
+  },[offset, timeView]);
+
+  const periods=useMemo(()=>timeView === "weekly" ? get4W(anchor) : get4M(anchor), [anchor, timeView]);
+  const allPeople=useMemo(()=>Object.entries(functions).flatMap(([fn,pp])=>pp.map(n=>({name:n,fn}))), [functions]);
+  const getColor=useCallback(p=>pColors[p]||DEFAULT_COLORS[p]||CPOOL[projects.indexOf(p)%CPOOL.length],[pColors,projects]);
+
+  const kpis=useMemo(()=>{
+    let over=0,under=0,un=0,ok=0;
+    allPeople.forEach(p=>{
+      const mx=Math.max(...periods.map(w=>allocW(allocations[p.name]||[],w)),0);
+      if(mx>100)over++; else if(mx===0)un++; else if(mx<50)under++; else ok++;
+    });
+    return{over,under,unassigned:un,ok};
+  },[allocations,periods,allPeople]);
+
+  const dialLabel=useMemo(()=>{
+    if(timeView === "weekly"){
+      return [...new Set(periods.map(p=>p.start.toLocaleDateString("en-GB",{month:"short",year:"numeric"})))].join(" · ");
+    } else {
+      return [...new Set(periods.map(p=>p.start.getFullYear()))].join(" · ");
+    }
+  },[periods, timeView]);
+
+  // Robust Search Filter
+  const baseFilteredPeople = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return allPeople.filter(p => {
+      const nameMatch = p.name.toLowerCase().includes(q);
+      const teamMatch = p.fn.toLowerCase().includes(q);
+      const matchSearch = !q || nameMatch || teamMatch;
+      const matchTeam = !filterFn || p.fn === filterFn;
+      const matchProj = !filterProj || (allocations[p.name] || []).some(e => e.project === filterProj);
+      return matchSearch && matchTeam && matchProj;
+    });
+  }, [search, filterFn, filterProj, allocations, allPeople]);
+
+  const teamViewData = useMemo(() => {
+    return Object.entries(functions).map(([fn]) => {
+      return { fn, people: baseFilteredPeople.filter(p => p.fn === fn).map(p => p.name) };
+    }).filter(t => t.people.length > 0);
+  }, [functions, baseFilteredPeople]);
+
+  function saveAlloc(name,entries){setAllocations(p=>({...p,[name]:entries}));setEditing(null);}
+  function addProject(name,color){setProjects(p=>[...p,name]);setPColors(c=>({...c,[name]:color}));}
+  function addMember(name, team){setFunctions(prev => ({...prev, [team]: [...(prev[team] || []), name]}));}
+  
+  function handleAddResourceToProject(personName, entry){
+    setAllocations(p => {
+      const existing = p[personName] || [];
+      return {...p, [personName]: [...existing, entry]};
+    });
+  }
+
+  return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#dde8ff 0%,#eedeff 45%,#d9f0ff 100%)"}}>
       <style>{STYLE}</style>
 
       {/* HEADER */}
-      <div style={{padding:"16px 26px",borderBottom:"1px solid #0f1520",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,background:"rgba(7,8,15,0.96)",backdropFilter:"blur(12px)"}}>
+      <div className="glass" style={{padding:"14px 26px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,borderRadius:0,borderLeft:"none",borderRight:"none",borderTop:"none"}}>
         <div>
-          <div style={{fontSize:18,fontWeight:800,color:"#f8fafc",fontFamily:"Syne,sans-serif",letterSpacing:"-0.02em"}}>Resource Planner</div>
-          <div style={{fontSize:10,color:"#2a3040",marginTop:1,fontFamily:"JetBrains Mono,monospace"}}>{allPeople.length} people · {PROJECTS.length} projects · weekly view</div>
+          <div style={{fontSize:19,fontWeight:700,color:"#1e293b",letterSpacing:"-.01em"}}>Resource Planner</div>
+          <div style={{fontSize:10,color:"#94a3b8",marginTop:1}}>{allPeople.length} people · {projects.length} projects</div>
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{background:"#0d1117",border:"1px solid #1a1f2e",borderRadius:8,padding:"7px 12px",color:"#e2e8f0",fontSize:12,width:160,outline:"none"}}/>
-          <select value={filterFn||""} onChange={e=>setFilterFn(e.target.value||null)} style={{background:"#0d1117",border:"1px solid #1a1f2e",borderRadius:8,padding:"7px 10px",color:filterFn?"#e2e8f0":"#334155",fontSize:12,outline:"none",cursor:"pointer"}}>
-            <option value="">All functions</option>
-            {Object.keys(FUNCTIONS).map(fn=><option key={fn} value={fn}>{fn}</option>)}
+        <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap"}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search member or team…" className="ginput" style={{padding:"7px 12px",fontSize:13,width:180}}/>
+          <select value={filterFn||""} onChange={e=>setFilterFn(e.target.value||null)} className="ginput" style={{padding:"7px 10px",fontSize:12,cursor:"pointer"}}>
+            <option value="">All teams</option>
+            {Object.keys(functions).map(f=><option key={f} value={f}>{f}</option>)}
           </select>
+          <div className="glassd" style={{display:"flex",borderRadius:11,padding:3,gap:2}}>
+            {[{v:"team",l:"👥 Team"},{v:"project",l:"📁 Project"}].map(({v,l})=>(
+              <button key={v} onClick={()=>setView(v)} style={{background:view===v?"rgba(99,102,241,.82)":"transparent",border:"none",borderRadius:8,padding:"6px 13px",color:view===v?"#fff":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"inherit",transition:"all .18s"}}>{l}</button>
+            ))}
+          </div>
+          <button onClick={()=>setAddingMember(true)} style={{background:"rgba(255,255,255,.6)", border:"1px solid rgba(99,102,241,.2)", borderRadius:11,padding:"8px 15px",color:"#6366f1",cursor:"pointer",fontSize:12,fontWeight:600}}>+ Member</button>
+          <button onClick={()=>setAddingProj(true)} style={{background:"rgba(99,102,241,.82)",backdropFilter:"blur(8px)",border:"1px solid rgba(99,102,241,.3)",borderRadius:11,padding:"8px 15px",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600}}>+ Project</button>
         </div>
       </div>
 
-      <div style={{padding:"20px 26px"}}>
+      <div style={{padding:"18px 26px"}}>
 
         {/* KPIs */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:11,marginBottom:18}}>
           {[
-            {label:"Over-allocated",val:kpis.over,color:"#f87171",icon:"⚠"},
-            {label:"Under-utilised",val:kpis.under,color:"#fbbf24",icon:"↓"},
-            {label:"Unassigned",val:kpis.unassigned,color:"#334155",icon:"○"},
-            {label:"Optimally loaded",val:kpis.ok,color:"#4ade80",icon:"✓"},
+            {l:"Over-allocated",v:kpis.over,c:"#ef4444",bg:"rgba(239,68,68,.06)",ic:"⚠"},
+            {l:"Under-utilised",v:kpis.under,c:"#f59e0b",bg:"rgba(245,158,11,.06)",ic:"↓"},
+            {l:"Unassigned",v:kpis.unassigned,c:"#94a3b8",bg:"rgba(148,163,184,.06)",ic:"○"},
+            {l:"Optimally loaded",v:kpis.ok,c:"#6366f1",bg:"rgba(99,102,241,.06)",ic:"✓"},
           ].map(k=>(
-            <div key={k.label} style={{background:"#0d1117",border:"1px solid #1a1f2e",borderRadius:12,padding:"14px 16px"}}>
+            <div key={k.l} className="glass" style={{borderRadius:15,padding:"14px 18px",background:k.bg}}>
               <div style={{display:"flex",justifyContent:"space-between"}}>
-                <div style={{fontSize:26,fontWeight:800,color:k.color,fontFamily:"JetBrains Mono,monospace"}}>{k.val}</div>
-                <div style={{fontSize:16,opacity:0.4}}>{k.icon}</div>
+                <div style={{fontSize:26,fontWeight:700,color:k.c}}>{k.v}</div>
+                <div style={{fontSize:18,opacity:.35}}>{k.ic}</div>
               </div>
-              <div style={{fontSize:10,color:"#334155",marginTop:4,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k.label}</div>
+              <div style={{fontSize:10,color:"#64748b",marginTop:5,fontWeight:600,textTransform:"uppercase",letterSpacing:".07em"}}>{k.l}</div>
             </div>
           ))}
         </div>
 
-        {/* Week nav */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:"#0d1117",borderRadius:12,padding:"11px 18px",marginBottom:4,border:"1px solid #1a1f2e"}}>
-          <button onClick={()=>setWeekOffset(w=>w-4)} style={{background:"#0d1117",border:"1px solid #1a1f2e",borderRadius:8,padding:"6px 14px",color:"#475569",cursor:"pointer",fontSize:12}}>← Prev</button>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:13,fontWeight:700,color:"#94a3b8",fontFamily:"Syne,sans-serif"}}>{monthLabel}</div>
-            <div style={{fontSize:10,color:"#2a3040",fontFamily:"JetBrains Mono,monospace",marginTop:1}}>
-              4-week rolling window
-              {weekOffset!==0&&<span style={{color:"#6366f1",marginLeft:8,cursor:"pointer"}} onClick={()=>setWeekOffset(0)}>↺ Back to today</span>}
-            </div>
-          </div>
-          <button onClick={()=>setWeekOffset(w=>w+4)} style={{background:"#0d1117",border:"1px solid #1a1f2e",borderRadius:8,padding:"6px 14px",color:"#475569",cursor:"pointer",fontSize:12}}>Next →</button>
+        {/* Project filter pills */}
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+          <button onClick={()=>setFilterProj(null)} className="glassd" style={{borderRadius:20,padding:"4px 13px",border:!filterProj?"1px solid rgba(99,102,241,.45)":"1px solid rgba(255,255,255,.6)",color:!filterProj?"#6366f1":"#94a3b8",cursor:"pointer",fontSize:12,fontFamily:"inherit",fontWeight:600}}>All Projects</button>
+          {projects.map(proj=>(
+            <button key={proj} onClick={()=>setFilterProj(filterProj===proj?null:proj)} style={{
+              background:filterProj===proj?`${getColor(proj)}16`:"rgba(255,255,255,.38)",
+              backdropFilter:"blur(8px)",
+              border:`1px solid ${filterProj===proj?getColor(proj)+"55":"rgba(255,255,255,.65)"}`,
+              borderRadius:20,padding:"4px 11px",
+              color:filterProj===proj?getColor(proj):"#64748b",
+              cursor:"pointer",fontSize:12,fontFamily:"inherit",fontWeight:filterProj===proj?600:400,
+              display:"flex",alignItems:"center",gap:5,
+            }}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:getColor(proj)}}/>
+              {proj}
+            </button>
+          ))}
         </div>
 
-        {/* Main table */}
-        <div style={{background:"#0a0d16",border:"1px solid #1a1f2e",borderRadius:12,overflow:"hidden",marginBottom:26}}>
-          {/* Header row */}
-          <div style={{display:"grid",gridTemplateColumns:"190px 72px repeat(4,96px)",background:"#070b12",borderBottom:"1px solid #1a1f2e",padding:"9px 16px",gap:0}}>
-            <div style={{fontSize:9,color:"#2a3040",fontFamily:"JetBrains Mono,monospace",textTransform:"uppercase",letterSpacing:"0.09em"}}>Person</div>
-            <div style={{fontSize:9,color:"#2a3040",fontFamily:"JetBrains Mono,monospace",textTransform:"uppercase",letterSpacing:"0.09em",textAlign:"center"}}>Now</div>
-            {weeks.map((w,i)=>(
+        {/* Dial + Timeline headers */}
+        <div className="glass" style={{borderRadius:14,marginBottom:6}}>
+          <div style={{position:"relative"}}>
+            <Dial offset={offset} setOffset={setOffset} label={dialLabel} />
+            <div style={{position:"absolute", bottom: 8, right: 14, display:"flex", background:"rgba(255,255,255,.5)", padding: 4, borderRadius: 8}}>
+              <button onClick={()=>{setTimeView("weekly"); setOffset(0);}} style={{background: timeView==="weekly"?"#6366f1":"transparent", color: timeView==="weekly"?"#fff":"#64748b", border:"none", borderRadius:6, padding:"4px 10px", fontSize:11, fontWeight:600, cursor:"pointer"}}>Weekly</button>
+              <button onClick={()=>{setTimeView("monthly"); setOffset(0);}} style={{background: timeView==="monthly"?"#6366f1":"transparent", color: timeView==="monthly"?"#fff":"#64748b", border:"none", borderRadius:6, padding:"4px 10px", fontSize:11, fontWeight:600, cursor:"pointer"}}>Monthly</button>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"230px 72px repeat(4,88px)",padding:"0 14px 8px",gap:0,alignItems:"center"}}>
+            <div style={{fontSize:9,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.08em"}}>Person</div>
+            <div style={{fontSize:9,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.08em",textAlign:"center"}}>Status</div>
+            {periods.map((w,i)=>(
               <div key={i} style={{textAlign:"center"}}>
-                <div style={{fontSize:11,fontWeight:600,color:"#475569",fontFamily:"JetBrains Mono,monospace"}}>{weekLabel(w)}</div>
-                <div style={{fontSize:8,color:"#1e2535",fontFamily:"JetBrains Mono,monospace"}}>Week {i+1}</div>
+                <div style={{fontSize:11,fontWeight:600,color:"#6366f1"}}>{pLabel(w)}</div>
+                <div style={{fontSize:8,color:"#cbd5e1"}}>{w.isMonth ? 'Month' : `Wk ${i+1}`}</div>
               </div>
             ))}
           </div>
-
-          {filtered.map(({fn,people})=>(
-            <div key={fn}>
-              <div style={{padding:"5px 16px",background:"#070b12",borderTop:"1px solid #1a1f2e",borderBottom:"1px solid #1a1f2e",display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:9,fontWeight:700,color:"#2a3040",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"JetBrains Mono,monospace"}}>{fn}</span>
-                <span style={{fontSize:9,color:"#1a1f2e",fontFamily:"JetBrains Mono,monospace"}}>{people.length}</span>
-              </div>
-              {people.map((name,idx)=>{
-                const entries=allocations[name]||[];
-                const loads=weeks.map(w=>allocForWeek(entries,w));
-                const maxLoad=Math.max(...loads,0);
-                const fnName=Object.entries(FUNCTIONS).find(([,pp])=>pp.includes(name))?.[0]||"";
-                return (
-                  <div key={name}
-                    onClick={()=>setEditing({name,fn:fnName})}
-                    style={{display:"grid",gridTemplateColumns:"190px 72px repeat(4,96px)",alignItems:"center",gap:0,padding:"7px 16px",borderBottom:idx<people.length-1?"1px solid #0d1117":"none",cursor:"pointer",transition:"background 0.1s",background:maxLoad>100?"rgba(239,68,68,0.03)":"transparent"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="#0d1117"}
-                    onMouseLeave={e=>e.currentTarget.style.background=maxLoad>100?"rgba(239,68,68,0.03)":"transparent"}
-                  >
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,background:maxLoad>100?"rgba(239,68,68,0.1)":maxLoad===0?"#0d1117":"rgba(99,102,241,0.1)",border:`1px solid ${maxLoad>100?"#ef444433":maxLoad===0?"#1a1f2e":"#6366f133"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:maxLoad>100?"#f87171":maxLoad===0?"#2a3040":"#818cf8",fontFamily:"JetBrains Mono,monospace"}}>
-                        {name.split(" ").map(w=>w[0]).slice(0,2).join("")}
-                      </div>
-                      <div style={{fontSize:12,fontWeight:500,color:"#cbd5e1"}}>{name}</div>
-                    </div>
-                    <div style={{textAlign:"center"}}><StatusPill total={maxLoad}/></div>
-                    {weeks.map((w,i)=>(
-                      <div key={i} style={{padding:"0 4px"}}><WeekCell entries={entries} week={w}/></div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
         </div>
 
-        {/* Project summary cards */}
-        <div style={{marginBottom:8}}>
-          <div style={{fontSize:10,fontWeight:700,color:"#2a3040",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"JetBrains Mono,monospace",marginBottom:12}}>Project headcount — 4 weeks</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
-            {PROJECTS.map(proj=>{
-              const weekData=weeks.map(w=>{
-                const count=allPeople.filter(p=>(allocations[p.name]||[]).some(e=>e.project===proj&&isActiveInWeek(e,w))).length;
-                return count;
-              });
-              return (
-                <div key={proj} style={{background:"#0d1117",border:"1px solid #1a1f2e",borderTop:`2px solid ${PC[proj]}`,borderRadius:10,padding:"12px 14px"}}>
-                  <div style={{fontSize:12,fontWeight:700,color:"#e2e8f0",fontFamily:"Syne,sans-serif",marginBottom:10}}>{proj}</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4}}>
-                    {weekData.map((c,i)=>(
-                      <div key={i} style={{textAlign:"center"}}>
-                        <div style={{fontSize:14,fontWeight:700,fontFamily:"JetBrains Mono,monospace",color:c===0?"#1e2535":PC[proj]}}>{c||"—"}</div>
-                        <div style={{fontSize:8,color:"#2a3040",fontFamily:"JetBrains Mono,monospace"}}>W{i+1}</div>
+        {/* TEAM VIEW */}
+        {view==="team"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:9}}>
+            {teamViewData.map(({fn,people})=>(
+              <div key={fn} className="glass" style={{borderRadius:14,overflow:"hidden"}}>
+                <div style={{padding:"7px 14px",background:"rgba(99,102,241,.04)",borderBottom:"1px solid rgba(255,255,255,.6)",display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#6366f1",textTransform:"uppercase",letterSpacing:".1em"}}>{fn}</div>
+                  <div style={{fontSize:9,color:"#cbd5e1",background:"rgba(99,102,241,.08)",borderRadius:8,padding:"1px 7px"}}>{people.length}</div>
+                </div>
+                {people.map((name,idx)=>{
+                  const entries=allocations[name]||[];
+                  const loads=periods.map(w=>allocW(entries,w));
+                  const mx=Math.max(...loads,0);
+                  const sc=mx>100?"#ef4444":mx>=75?"#ea580c":mx>50?"#f59e0b":mx>0?"#22c55e":"#cbd5e1";
+                  const sl=mx>100?"OVER":mx>=75?"FULL":mx>50?"MID":mx>0?"LOW":"—";
+                  return(
+                    <div key={name} className="rh"
+                      onClick={()=>setEditing({name,fn:fn})}
+                      style={{display:"grid",gridTemplateColumns:"230px 72px repeat(4,88px)",alignItems:"center",gap:0,padding:"8px 14px",borderBottom:idx<people.length-1?"1px solid rgba(255,255,255,.5)":"none",cursor:"pointer",background:mx>100?"rgba(239,68,68,.03)":"transparent"}}
+                    >
+                      <div style={{display:"flex",alignItems:"center",gap:9}}>
+                        <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,background:mx>100?"rgba(239,68,68,.1)":mx===0?"rgba(203,213,225,.3)":"rgba(99,102,241,.1)",border:`1.5px solid ${mx>100?"rgba(239,68,68,.3)":mx===0?"rgba(203,213,225,.4)":"rgba(99,102,241,.25)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:mx>100?"#ef4444":mx===0?"#94a3b8":"#6366f1"}}>
+                          {name.split(" ").map(w=>w[0]).slice(0,2).join("")}
+                        </div>
+                        <div style={{fontSize:13,fontWeight:500,color:"#1e293b"}}>{name}</div>
                       </div>
-                    ))}
+                      <div style={{textAlign:"center"}}>
+                        <span style={{fontSize:9,fontWeight:700,padding:"3px 7px",borderRadius:6,background:`${sc}14`,color:sc,border:`1px solid ${sc}28`,letterSpacing:".05em"}}>{sl}</span>
+                      </div>
+                      {periods.map((w,i)=>(
+                        <div key={i} style={{padding:"0 4px"}}>
+                          <WaterCell entries={entries} period={w} getColor={getColor}/>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* PROJECT VIEW */}
+        {view==="project"&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:12}}>
+            {projects.map(proj=>{
+              const assigned = baseFilteredPeople
+                .filter(p => (allocations[p.name]||[]).some(e => e.project === proj))
+                .map(p => p.name);
+                
+              const wkData = periods.map(w => assigned.filter(pName => (allocations[pName]||[]).some(e => e.project === proj && active(e, w))).length);
+              const col=getColor(proj);
+              
+              if (search && assigned.length === 0) return null;
+
+              return(
+                <div key={proj} className="glass" style={{borderRadius:14,overflow:"hidden",borderTop:`3px solid ${col}`}}>
+                  <div style={{padding:"13px 16px 12px"}}>
+                    
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:700,color:"#1e293b"}}>{proj}</div>
+                        <div style={{fontSize:10,color:"#94a3b8"}}>{assigned.length} assigned</div>
+                      </div>
+                      <button onClick={(e)=>{e.stopPropagation(); setAddingResourceToProj(proj);}} style={{background:"rgba(255,255,255,.6)", border:"1px solid rgba(99,102,241,.2)", borderRadius:7, padding:"4px 10px", color:"#6366f1", cursor:"pointer", fontSize:11, fontWeight:700}}>+ Add</button>
+                    </div>
+                    
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5,marginBottom:13}}>
+                      {wkData.map((c,i)=>(
+                        <div key={i} style={{textAlign:"center",background:"rgba(255,255,255,.5)",borderRadius:9,padding:"7px 3px",border:"1px solid rgba(255,255,255,.8)"}}>
+                          <div style={{fontSize:15,fontWeight:700,color:c===0?"#cbd5e1":col}}>{c||"—"}</div>
+                          <div style={{fontSize:8,color:"#94a3b8",marginTop:1}}>{periods[i].isMonth ? 'M' : 'Wk'} {i+1}</div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                      {assigned.map(pName=>{
+                        const entry=(allocations[pName]||[]).find(e=>e.project===proj);
+                        const pFn = allPeople.find(ap => ap.name === pName)?.fn || "";
+                        return(
+                          <div key={pName} className="rh-proj" onClick={()=>setEditing({name:pName, fn:pFn})} style={{display:"grid",gridTemplateColumns:"24px 1fr 60px 40px",gap:10,alignItems:"center", padding:"5px 6px", margin:"0 -6px"}}>
+                            <div style={{width:24,height:24,borderRadius:"50%",background:`${col}18`,border:`1px solid ${col}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:col}}>
+                              {pName.split(" ").map(w=>w[0]).slice(0,2).join("")}
+                            </div>
+                            <div style={{fontSize:13,fontWeight:500,color:"#334155",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pName}</div>
+                            <div style={{fontSize:11,fontWeight:600,color:"#94a3b8",textAlign:"right",whiteSpace:"nowrap"}}>{pFn}</div>
+                            <div style={{fontSize:13,fontWeight:800,color:col,textAlign:"right"}}>{entry?.pct||0}%</div>
+                          </div>
+                        );
+                      })}
+                      {assigned.length===0&&<div style={{fontSize:11,color:"#cbd5e1",textAlign:"center",padding:"10px 0"}}>No resources assigned. Click + Add to assign someone.</div>}
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
+        )}
+
       </div>
 
-      {editing&&(
-        <EditModal person={editing.name} fn={editing.fn} entries={allocations[editing.name]||[]} onSave={e=>save(editing.name,e)} onClose={()=>setEditing(null)}/>
-      )}
+      {editing&&<EditModal person={editing.name} fn={editing.fn} entries={allocations[editing.name]||[]} onSave={e=>saveAlloc(editing.name,e)} onClose={()=>setEditing(null)} projects={projects} getColor={getColor}/>}
+      {addingProj&&<AddProjectModal onAdd={addProject} onClose={()=>setAddingProj(false)} existing={projects}/>}
+      {addingMember && <AddMemberModal onAdd={addMember} onClose={()=>setAddingMember(false)} teams={Object.keys(functions)} />}
+      {addingResourceToProj && <AddResourceToProjectModal project={addingResourceToProj} allPeople={allPeople} allocations={allocations} onSave={handleAddResourceToProject} onClose={()=>setAddingResourceToProj(null)} />}
     </div>
   );
 }
