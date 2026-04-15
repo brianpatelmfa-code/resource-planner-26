@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { supabase } from './supabaseClient';
+import { supabase } from './supabaseClient'; 
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English&display=swap');
@@ -44,7 +44,6 @@ const STYLE = `
   @keyframes fi { from{opacity:0} to{opacity:1} }
 `;
 
-// ── Updated Functions Structure ──
 const INITIAL_FUNCTIONS = {
   "Tech lead": ["Stephen", "Ankit"],
   "Design":    ["Prajjwal","Sanjana Babu","Mohammed Hisham","Sneha Gupta"],
@@ -143,10 +142,10 @@ function WaterCell({entries, period, getColor}){
   const cl=Math.min(tot,100);
 
   let wc = "transparent";
-  if (tot >= 100) wc = "rgba(239, 68, 68, 0.8)"; // Red
-  else if (tot >= 75) wc = "rgba(234, 88, 12, 0.8)"; // Darker Orange
-  else if (tot >= 50) wc = "rgba(245, 158, 11, 0.7)"; // Orange
-  else if (tot > 0) wc = "rgba(34, 197, 94, 0.7)"; // Green
+  if (tot >= 100) wc = "rgba(239, 68, 68, 0.8)"; 
+  else if (tot >= 75) wc = "rgba(234, 88, 12, 0.8)"; 
+  else if (tot >= 50) wc = "rgba(245, 158, 11, 0.7)"; 
+  else if (tot > 0) wc = "rgba(34, 197, 94, 0.7)"; 
 
   return(
     <div style={{width:80,height:54,borderRadius:10,overflow:"hidden",position:"relative",background:"rgba(255,255,255,.45)",border:`1px solid ${over?"rgba(239,68,68,.35)":"rgba(255,255,255,.75)"}`,boxShadow:"0 2px 8px rgba(99,102,241,.05)"}}>
@@ -204,7 +203,7 @@ function Dial({offset, setOffset, label}){
 }
 
 // ── Edit modal ──
-function EditModal({person,fn,entries,onSave,onClose,projects,getColor}){
+function EditModal({person,fn,entries,onSave,onClose,onDelete,projects,getColor}){
   const [local,setLocal]=useState(entries.map(e=>({...e})));
   const add=()=>setLocal(p=>[...p,{project:projects[0],pct:50,start:APR1,end:dStr(addW(new Date(APR1),8))}]);
   const rm=i=>setLocal(p=>p.filter((_,j)=>j!==i));
@@ -257,9 +256,15 @@ function EditModal({person,fn,entries,onSave,onClose,projects,getColor}){
         </div>
         <button onClick={add} className="glassd" style={{width:"100%",border:"1.5px dashed rgba(99,102,241,.28)",borderRadius:11,padding:"8px",color:"#6366f1",cursor:"pointer",fontSize:13,marginBottom:12,fontFamily:"inherit"}}>+ Add assignment</button>
         {err&&<div style={{background:"rgba(239,68,68,.06)",border:"1px solid rgba(239,68,68,.18)",borderRadius:9,padding:"9px 13px",fontSize:12,color:"#dc2626",marginBottom:11}}>⚠ Exceeds 100%. Please adjust.</div>}
-        <div style={{display:"flex",gap:9,justifyContent:"flex-end"}}>
-          <button onClick={onClose} className="glassd" style={{borderRadius:9,padding:"8px 16px",color:"#64748b",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>Cancel</button>
-          <button onClick={()=>{if(!err)onSave(local);}} disabled={err} style={{background:err?"rgba(99,102,241,.1)":"rgba(99,102,241,.85)",backdropFilter:"blur(8px)",border:"1px solid rgba(99,102,241,.3)",borderRadius:9,padding:"8px 20px",color:err?"#a5b4fc":"#fff",cursor:err?"not-allowed":"pointer",fontSize:13,fontWeight:600}}>Save</button>
+        
+        {/* Changed button layout to include Delete Person */}
+        <div style={{display:"flex",gap:9,justifyContent:"space-between", alignItems:"center"}}>
+          <button onClick={()=>{ if(window.confirm(`Are you sure you want to delete ${person} from the team?`)) onDelete(person, fn); }} className="glassd" style={{background:"rgba(239,68,68,.05)", border:"1px solid rgba(239,68,68,.2)", borderRadius:9,padding:"8px 16px",color:"#ef4444",cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>Delete Person</button>
+          
+          <div style={{display:"flex",gap:9}}>
+            <button onClick={onClose} className="glassd" style={{borderRadius:9,padding:"8px 16px",color:"#64748b",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>Cancel</button>
+            <button onClick={()=>{if(!err)onSave(local);}} disabled={err} style={{background:err?"rgba(99,102,241,.1)":"rgba(99,102,241,.85)",backdropFilter:"blur(8px)",border:"1px solid rgba(99,102,241,.3)",borderRadius:9,padding:"8px 20px",color:err?"#a5b4fc":"#fff",cursor:err?"not-allowed":"pointer",fontSize:13,fontWeight:600}}>Save</button>
+          </div>
         </div>
       </div>
     </div>
@@ -316,7 +321,6 @@ function AddMemberModal({onAdd, onClose, teams}){
 
 // ── Add Resource to Project Modal ──
 function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocations}){
-  // Filter out people who are already assigned to this project
   const avail = allPeople.filter(p => !(allocations[p.name]||[]).some(e => e.project === project));
   
   const [person, setPerson] = useState(avail.length ? avail[0].name : "");
@@ -375,14 +379,14 @@ function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocat
 }
 
 // ── MAIN ──
- export default function Dashboard(){
+export default function Dashboard(){
   const [projects, setProjects] = useState([]);
   const [allocations, setAllocations] = useState({});
   const [pColors, setPColors] = useState({});
   const [functions, setFunctions] = useState({});
   const [loading, setLoading] = useState(true);
 
-// Fetch initial data from Supabase
+  // Fetch initial data from Supabase
   useEffect(() => {
     async function loadData() {
       const { data, error } = await supabase
@@ -392,7 +396,6 @@ function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocat
         .single();
       
       if (data) {
-        // Check if the database has empty arrays/objects. If it does, use the default seed data.
         const loadedProjects = data.projects?.length > 0 ? data.projects : DEFAULT_PROJECTS;
         const loadedAllocations = Object.keys(data.allocations || {}).length > 0 ? data.allocations : buildSeed();
         const loadedColors = Object.keys(data.p_colors || {}).length > 0 ? data.p_colors : DEFAULT_COLORS;
@@ -403,13 +406,9 @@ function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocat
         setPColors(loadedColors);
         setFunctions(loadedFunctions);
 
-        // If the database was totally empty, push this seed data up to Supabase instantly to save it
         if (!data.projects?.length) {
             await supabase.from('planner_state').update({
-                projects: loadedProjects,
-                allocations: loadedAllocations,
-                p_colors: loadedColors,
-                functions: loadedFunctions
+                projects: loadedProjects, allocations: loadedAllocations, p_colors: loadedColors, functions: loadedFunctions
             }).eq('id', 1);
         }
       } else if (error && error.code !== 'PGRST116') {
@@ -491,7 +490,7 @@ function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocat
     }).filter(t => t.people.length > 0);
   }, [functions, baseFilteredPeople]);
 
-  // Action Handlers with Supabase Sync
+  // --- ACTIONS WITH SUPABASE SYNC ---
   function saveAlloc(name, entries){
     const newAlloc = {...allocations, [name]: entries};
     setAllocations(newAlloc);
@@ -506,11 +505,59 @@ function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocat
     setPColors(newColors);
     syncToDatabase(newProj, allocations, newColors, functions);
   }
+
+  function deleteProject(targetProject) {
+    const newProjects = projects.filter(p => p !== targetProject);
+    const newColors = { ...pColors };
+    delete newColors[targetProject];
+
+    const newAllocations = { ...allocations };
+    Object.keys(newAllocations).forEach(person => {
+      newAllocations[person] = newAllocations[person].filter(e => e.project !== targetProject);
+    });
+
+    setProjects(newProjects);
+    setPColors(newColors);
+    setAllocations(newAllocations);
+    syncToDatabase(newProjects, newAllocations, newColors, functions);
+  }
   
   function addMember(name, team){
     const newFuncs = {...functions, [team]: [...(functions[team] || []), name]};
     setFunctions(newFuncs);
     syncToDatabase(projects, allocations, pColors, newFuncs);
+  }
+
+  function deleteMember(targetMember, targetTeam) {
+    const newFunctions = { ...functions };
+    if (newFunctions[targetTeam]) {
+      newFunctions[targetTeam] = newFunctions[targetTeam].filter(name => name !== targetMember);
+    }
+
+    const newAllocations = { ...allocations };
+    delete newAllocations[targetMember];
+
+    setFunctions(newFunctions);
+    setAllocations(newAllocations);
+    syncToDatabase(projects, newAllocations, pColors, newFunctions);
+    setEditing(null); 
+  }
+
+  function deleteTeam(targetTeam) {
+    if(!window.confirm(`Are you sure you want to delete the entire "${targetTeam}" team? This will permanently remove all its members.`)) return;
+
+    const newFunctions = { ...functions };
+    const membersToRemove = newFunctions[targetTeam] || [];
+    delete newFunctions[targetTeam];
+
+    const newAllocations = { ...allocations };
+    membersToRemove.forEach(member => {
+      delete newAllocations[member];
+    });
+
+    setFunctions(newFunctions);
+    setAllocations(newAllocations);
+    syncToDatabase(projects, newAllocations, pColors, newFunctions);
   }
   
   function handleAddResourceToProject(personName, entry){
@@ -615,10 +662,16 @@ function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocat
           <div style={{display:"flex",flexDirection:"column",gap:9}}>
             {teamViewData.map(({fn,people})=>(
               <div key={fn} className="glass" style={{borderRadius:14,overflow:"hidden"}}>
-                <div style={{padding:"7px 14px",background:"rgba(99,102,241,.04)",borderBottom:"1px solid rgba(255,255,255,.6)",display:"flex",alignItems:"center",gap:8}}>
-                  <div style={{fontSize:10,fontWeight:700,color:"#6366f1",textTransform:"uppercase",letterSpacing:".1em"}}>{fn}</div>
-                  <div style={{fontSize:9,color:"#cbd5e1",background:"rgba(99,102,241,.08)",borderRadius:8,padding:"1px 7px"}}>{people.length}</div>
+                
+                {/* NEW: Team Delete Button added to the header */}
+                <div style={{padding:"7px 14px",background:"rgba(99,102,241,.04)",borderBottom:"1px solid rgba(255,255,255,.6)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#6366f1",textTransform:"uppercase",letterSpacing:".1em"}}>{fn}</div>
+                    <div style={{fontSize:9,color:"#cbd5e1",background:"rgba(99,102,241,.08)",borderRadius:8,padding:"1px 7px"}}>{people.length}</div>
+                  </div>
+                  <button onClick={(e)=>{ e.stopPropagation(); deleteTeam(fn); }} style={{background:"rgba(239, 68, 68, .08)", border:"1px solid rgba(239, 68, 68, .15)", borderRadius:7, padding:"2px 6px", color:"#ef4444", cursor:"pointer", fontSize:10}}>🗑️</button>
                 </div>
+
                 {people.map((name,idx)=>{
                   const entries=allocations[name]||[];
                   const loads=periods.map(w=>allocW(entries,w));
@@ -674,7 +727,15 @@ function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocat
                         <div style={{fontSize:14,fontWeight:700,color:"#1e293b"}}>{proj}</div>
                         <div style={{fontSize:10,color:"#94a3b8"}}>{assigned.length} assigned</div>
                       </div>
-                      <button onClick={(e)=>{e.stopPropagation(); setAddingResourceToProj(proj);}} style={{background:"rgba(255,255,255,.6)", border:"1px solid rgba(99,102,241,.2)", borderRadius:7, padding:"4px 10px", color:"#6366f1", cursor:"pointer", fontSize:11, fontWeight:700}}>+ Add</button>
+                      <div style={{display:"flex", gap:"6px"}}>
+                        <button onClick={(e)=>{e.stopPropagation(); setAddingResourceToProj(proj);}} style={{background:"rgba(255,255,255,.6)", border:"1px solid rgba(99,102,241,.2)", borderRadius:7, padding:"4px 10px", color:"#6366f1", cursor:"pointer", fontSize:11, fontWeight:700}}>+ Add</button>
+                        <button onClick={(e)=>{
+                            e.stopPropagation(); 
+                            if(window.confirm(`Are you sure you want to delete ${proj}? This will remove it from everyone's schedule.`)){
+                                deleteProject(proj);
+                            }
+                        }} style={{background:"rgba(239, 68, 68, .08)", border:"1px solid rgba(239, 68, 68, .15)", borderRadius:7, padding:"4px 8px", color:"#ef4444", cursor:"pointer", fontSize:11}}>🗑️</button>
+                      </div>
                     </div>
                     
                     <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5,marginBottom:13}}>
@@ -712,7 +773,7 @@ function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocat
 
       </div>
 
-      {editing&&<EditModal person={editing.name} fn={editing.fn} entries={allocations[editing.name]||[]} onSave={e=>saveAlloc(editing.name,e)} onClose={()=>setEditing(null)} projects={projects} getColor={getColor}/>}
+      {editing&&<EditModal person={editing.name} fn={editing.fn} entries={allocations[editing.name]||[]} onDelete={(p, f) => deleteMember(p, f)} onSave={e=>saveAlloc(editing.name,e)} onClose={()=>setEditing(null)} projects={projects} getColor={getColor}/>}
       {addingProj&&<AddProjectModal onAdd={addProject} onClose={()=>setAddingProj(false)} existing={projects}/>}
       {addingMember && <AddMemberModal onAdd={addMember} onClose={()=>setAddingMember(false)} teams={Object.keys(functions)} />}
       {addingResourceToProj && <AddResourceToProjectModal project={addingResourceToProj} allPeople={allPeople} allocations={allocations} onSave={handleAddResourceToProject} onClose={()=>setAddingResourceToProj(null)} />}
