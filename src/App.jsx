@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { supabase } from './supabaseClient';
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English&display=swap');
@@ -374,19 +375,65 @@ function AddResourceToProjectModal({project, onClose, onSave, allPeople, allocat
 }
 
 // ── MAIN ──
-export default function Dashboard(){
-  // Bumped IDs to 5 so local storage reloads the new teams fresh.
-  const LS_ALLOC="rp_alloc5"; const LS_PROJ="rp_proj5"; const LS_COL="rp_col5"; const LS_FN="rp_fn5";
+ export default function Dashboard(){
+  const [projects, setProjects] = useState([]);
+  const [allocations, setAllocations] = useState({});
+  const [pColors, setPColors] = useState({});
+  const [functions, setFunctions] = useState({});
+  const [loading, setLoading] = useState(true);
 
-  const [projects,setProjects]=useState(()=>{try{const s=localStorage.getItem(LS_PROJ);return s?JSON.parse(s):DEFAULT_PROJECTS;}catch{return DEFAULT_PROJECTS;}});
-  const [allocations,setAllocations]=useState(()=>{try{const s=localStorage.getItem(LS_ALLOC);return s?JSON.parse(s):buildSeed();}catch{return buildSeed();}});
-  const [pColors,setPColors]=useState(()=>{try{const s=localStorage.getItem(LS_COL);return s?JSON.parse(s):DEFAULT_COLORS;}catch{return DEFAULT_COLORS;}});
-  const [functions, setFunctions] = useState(()=>{try{const s=localStorage.getItem(LS_FN);return s?JSON.parse(s):INITIAL_FUNCTIONS;}catch{return INITIAL_FUNCTIONS;}});
+// Fetch initial data from Supabase
+  useEffect(() => {
+    async function loadData() {
+      const { data, error } = await supabase
+        .from('planner_state')
+        .select('*')
+        .eq('id', 1)
+        .single();
+      
+      if (data) {
+        // Check if the database has empty arrays/objects. If it does, use the default seed data.
+        const loadedProjects = data.projects?.length > 0 ? data.projects : DEFAULT_PROJECTS;
+        const loadedAllocations = Object.keys(data.allocations || {}).length > 0 ? data.allocations : buildSeed();
+        const loadedColors = Object.keys(data.p_colors || {}).length > 0 ? data.p_colors : DEFAULT_COLORS;
+        const loadedFunctions = Object.keys(data.functions || {}).length > 0 ? data.functions : INITIAL_FUNCTIONS;
 
-  useEffect(()=>{try{localStorage.setItem(LS_PROJ,JSON.stringify(projects));}catch{}},[projects]);
-  useEffect(()=>{try{localStorage.setItem(LS_ALLOC,JSON.stringify(allocations));}catch{}},[allocations]);
-  useEffect(()=>{try{localStorage.setItem(LS_COL,JSON.stringify(pColors));}catch{}},[pColors]);
-  useEffect(()=>{try{localStorage.setItem(LS_FN,JSON.stringify(functions));}catch{}},[functions]);
+        setProjects(loadedProjects);
+        setAllocations(loadedAllocations);
+        setPColors(loadedColors);
+        setFunctions(loadedFunctions);
+
+        // If the database was totally empty, push this seed data up to Supabase instantly to save it
+        if (!data.projects?.length) {
+            await supabase.from('planner_state').update({
+                projects: loadedProjects,
+                allocations: loadedAllocations,
+                p_colors: loadedColors,
+                functions: loadedFunctions
+            }).eq('id', 1);
+        }
+      } else if (error && error.code !== 'PGRST116') {
+        console.error("Error loading data:", error);
+      }
+      setLoading(false);
+    }
+    loadData();
+  }, []);
+
+  // Master sync function
+  async function syncToDatabase(newProjects, newAllocations, newColors, newFunctions) {
+    const { error } = await supabase
+      .from('planner_state')
+      .update({
+        projects: newProjects,
+        allocations: newAllocations,
+        p_colors: newColors,
+        functions: newFunctions
+      })
+      .eq('id', 1);
+      
+    if (error) console.error("Error syncing to DB:", error);
+  }
 
   const [timeView, setTimeView] = useState("weekly"); 
   const [offset, setOffset] = useState(0); 
@@ -398,7 +445,7 @@ export default function Dashboard(){
   const [editing,setEditing]=useState(null);
   const [addingProj,setAddingProj]=useState(false);
   const [addingMember, setAddingMember] = useState(false);
-  const [addingResourceToProj, setAddingResourceToProj] = useState(null); // stores project name
+  const [addingResourceToProj, setAddingResourceToProj] = useState(null);
 
   const anchor=useMemo(()=>{
     if(timeView === "weekly") return addDays(new Date(), offset*7);
@@ -426,7 +473,6 @@ export default function Dashboard(){
     }
   },[periods, timeView]);
 
-  // Robust Search Filter
   const baseFilteredPeople = useMemo(() => {
     const q = search.toLowerCase().trim();
     return allPeople.filter(p => {
@@ -445,15 +491,37 @@ export default function Dashboard(){
     }).filter(t => t.people.length > 0);
   }, [functions, baseFilteredPeople]);
 
-  function saveAlloc(name,entries){setAllocations(p=>({...p,[name]:entries}));setEditing(null);}
-  function addProject(name,color){setProjects(p=>[...p,name]);setPColors(c=>({...c,[name]:color}));}
-  function addMember(name, team){setFunctions(prev => ({...prev, [team]: [...(prev[team] || []), name]}));}
+  // Action Handlers with Supabase Sync
+  function saveAlloc(name, entries){
+    const newAlloc = {...allocations, [name]: entries};
+    setAllocations(newAlloc);
+    syncToDatabase(projects, newAlloc, pColors, functions);
+    setEditing(null);
+  }
+  
+  function addProject(name, color){
+    const newProj = [...projects, name];
+    const newColors = {...pColors, [name]: color};
+    setProjects(newProj);
+    setPColors(newColors);
+    syncToDatabase(newProj, allocations, newColors, functions);
+  }
+  
+  function addMember(name, team){
+    const newFuncs = {...functions, [team]: [...(functions[team] || []), name]};
+    setFunctions(newFuncs);
+    syncToDatabase(projects, allocations, pColors, newFuncs);
+  }
   
   function handleAddResourceToProject(personName, entry){
-    setAllocations(p => {
-      const existing = p[personName] || [];
-      return {...p, [personName]: [...existing, entry]};
-    });
+    const existing = allocations[personName] || [];
+    const newAlloc = {...allocations, [personName]: [...existing, entry]};
+    setAllocations(newAlloc);
+    syncToDatabase(projects, newAlloc, pColors, functions);
+  }
+
+  if (loading) {
+    return <div style={{height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#dde8ff"}}>Loading Planner...</div>;
   }
 
   return(
