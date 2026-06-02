@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { supabase } from './supabaseClient'; 
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from './firebaseClient'; 
 
 const STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English&display=swap');
@@ -257,7 +258,6 @@ function EditModal({person,fn,entries,onSave,onClose,onDelete,projects,getColor}
         <button onClick={add} className="glassd" style={{width:"100%",border:"1.5px dashed rgba(99,102,241,.28)",borderRadius:11,padding:"8px",color:"#6366f1",cursor:"pointer",fontSize:13,marginBottom:12,fontFamily:"inherit"}}>+ Add assignment</button>
         {err&&<div style={{background:"rgba(239,68,68,.06)",border:"1px solid rgba(239,68,68,.18)",borderRadius:9,padding:"9px 13px",fontSize:12,color:"#dc2626",marginBottom:11}}>⚠ Exceeds 100%. Please adjust.</div>}
         
-        {/* Changed button layout to include Delete Person */}
         <div style={{display:"flex",gap:9,justifyContent:"space-between", alignItems:"center"}}>
           <button onClick={()=>{ if(window.confirm(`Are you sure you want to delete ${person} from the team?`)) onDelete(person, fn); }} className="glassd" style={{background:"rgba(239,68,68,.05)", border:"1px solid rgba(239,68,68,.2)", borderRadius:9,padding:"8px 16px",color:"#ef4444",cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>Delete Person</button>
           
@@ -386,32 +386,38 @@ export default function Dashboard(){
   const [functions, setFunctions] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Fetch initial data from Supabase
+  // Fetch initial data from FIREBASE
   useEffect(() => {
     async function loadData() {
-      const { data, error } = await supabase
-        .from('planner_state')
-        .select('*')
-        .eq('id', 1)
-        .single();
-      
-      if (data) {
-        const loadedProjects = data.projects?.length > 0 ? data.projects : DEFAULT_PROJECTS;
-        const loadedAllocations = Object.keys(data.allocations || {}).length > 0 ? data.allocations : buildSeed();
-        const loadedColors = Object.keys(data.p_colors || {}).length > 0 ? data.p_colors : DEFAULT_COLORS;
-        const loadedFunctions = Object.keys(data.functions || {}).length > 0 ? data.functions : INITIAL_FUNCTIONS;
+      try {
+        const docRef = doc(db, "planner", "state");
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const loadedProjects = data.projects?.length > 0 ? data.projects : DEFAULT_PROJECTS;
+          const loadedAllocations = Object.keys(data.allocations || {}).length > 0 ? data.allocations : buildSeed();
+          const loadedColors = Object.keys(data.p_colors || {}).length > 0 ? data.p_colors : DEFAULT_COLORS;
+          const loadedFunctions = Object.keys(data.functions || {}).length > 0 ? data.functions : INITIAL_FUNCTIONS;
 
-        setProjects(loadedProjects);
-        setAllocations(loadedAllocations);
-        setPColors(loadedColors);
-        setFunctions(loadedFunctions);
-
-        if (!data.projects?.length) {
-            await supabase.from('planner_state').update({
-                projects: loadedProjects, allocations: loadedAllocations, p_colors: loadedColors, functions: loadedFunctions
-            }).eq('id', 1);
+          setProjects(loadedProjects);
+          setAllocations(loadedAllocations);
+          setPColors(loadedColors);
+          setFunctions(loadedFunctions);
+          
+          if (!data.projects?.length) {
+              await setDoc(docRef, { projects: loadedProjects, allocations: loadedAllocations, p_colors: loadedColors, functions: loadedFunctions });
+          }
+        } else {
+          // If document doesn't exist at all yet, initialize it
+          const initialData = { projects: DEFAULT_PROJECTS, allocations: buildSeed(), p_colors: DEFAULT_COLORS, functions: INITIAL_FUNCTIONS };
+          await setDoc(docRef, initialData);
+          setProjects(initialData.projects);
+          setAllocations(initialData.allocations);
+          setPColors(initialData.p_colors);
+          setFunctions(initialData.functions);
         }
-      } else if (error && error.code !== 'PGRST116') {
+      } catch (error) {
         console.error("Error loading data:", error);
       }
       setLoading(false);
@@ -419,19 +425,18 @@ export default function Dashboard(){
     loadData();
   }, []);
 
-  // Master sync function
+  // Master sync function for FIREBASE
   async function syncToDatabase(newProjects, newAllocations, newColors, newFunctions) {
-    const { error } = await supabase
-      .from('planner_state')
-      .update({
+    try {
+      await setDoc(doc(db, "planner", "state"), {
         projects: newProjects,
         allocations: newAllocations,
         p_colors: newColors,
         functions: newFunctions
-      })
-      .eq('id', 1);
-      
-    if (error) console.error("Error syncing to DB:", error);
+      }, { merge: true });
+    } catch (error) {
+      console.error("Error syncing to DB:", error);
+    }
   }
 
   const [timeView, setTimeView] = useState("weekly"); 
@@ -663,7 +668,7 @@ export default function Dashboard(){
             {teamViewData.map(({fn,people})=>(
               <div key={fn} className="glass" style={{borderRadius:14,overflow:"hidden"}}>
                 
-                {/* NEW: Team Delete Button added to the header */}
+                {/* Team Delete Button added to the header */}
                 <div style={{padding:"7px 14px",background:"rgba(99,102,241,.04)",borderBottom:"1px solid rgba(255,255,255,.6)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <div style={{fontSize:10,fontWeight:700,color:"#6366f1",textTransform:"uppercase",letterSpacing:".1em"}}>{fn}</div>
@@ -722,6 +727,7 @@ export default function Dashboard(){
                 <div key={proj} className="glass" style={{borderRadius:14,overflow:"hidden",borderTop:`3px solid ${col}`}}>
                   <div style={{padding:"13px 16px 12px"}}>
                     
+                    {/* Trash can button added here */}
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                       <div>
                         <div style={{fontSize:14,fontWeight:700,color:"#1e293b"}}>{proj}</div>
